@@ -1,6 +1,8 @@
 from pickle import load
 from numpy import array
+import numpy as np
 from mayavi import mlab
+import matplotlib.pyplot as plt
 
 
 def unpickle_elevation_matrix(pickle_file):
@@ -47,11 +49,19 @@ def plot_mlab(x, y, z):
     mlab.show()
 
 
+def f(x, y):
+    return np.sin(x) ** 10 + np.cos(10 + y * x) * np.cos(x)
+
 def main():
-    loaded_matrix = unpickle_elevation_matrix("matrix_pickle_capitan.bin")
-    x, y, z = convert_matrix(loaded_matrix, 30)
+    loaded_matrix = unpickle_elevation_matrix("matrix_pickle_k2.bin")
+    x, y, z = convert_matrix(loaded_matrix, 300)
+
     plot_mlab(x, y, z)
 
+
+    plt.tricontour(x.ravel(), y.ravel(), z.ravel(), 100)
+    plt.show()
+    print("stop")
 
 if __name__ == "__main__":
     main()
