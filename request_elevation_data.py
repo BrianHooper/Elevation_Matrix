@@ -1,12 +1,26 @@
 # Brian Hooper
 # November 8th, 2018
 
-import json
-import requests
-import pickle
-import sys
+from json import JSONDecodeError, loads
+from requests import get, exceptions
+from pickle import dump
+from sys import argv
+from math import radians, cos, sin, asin, sqrt
 
 URL_HEAD = "https://maps.googleapis.com/maps/api/elevation/json?locations="
+
+
+def progress_bar(percent, width=50):
+    """
+    prints a progress bar to the console
+    :param percent: current percentage completed
+    :param width: number of characters wide to make the progress bar
+    :return: None
+    """
+    num_pounds = int(percent * width)
+    pounds = "#" * num_pounds
+    dashes = "-" * (width - num_pounds)
+    print("\rProgress: %7.3f%% %s%s" % (percent * 100, pounds, dashes), end="")
 
 
 def parse_json(json_data):
@@ -15,7 +29,11 @@ def parse_json(json_data):
     :param json_data: json data object
     :return: elevation as float
     """
-    return float(json_data["results"][0]["elevation"])
+    if "results" in json_data:
+        if type(json_data["results"]) == list and len(json_data["results"]) != 0:
+            if "elevation" in json_data["results"][0]:
+                return int(json_data["results"][0]["elevation"])
+    return 0
 
 
 def retrieve_elevation(latitude, longitude, api_key):
@@ -27,10 +45,38 @@ def retrieve_elevation(latitude, longitude, api_key):
     :return: elevation at coordinate
     """
     url = URL_HEAD + str(latitude) + "," + str(longitude) + "&key=" + api_key
-    raw_json = requests.get(url).text
-    json_data = json.loads(raw_json)
-    elevation = parse_json(json_data)
-    return elevation
+    try:
+        http_request = get(url)
+    except exceptions.RequestException as e:
+        print(e)
+        return 0
+    if http_request.status_code == 200:
+        raw_json = http_request.text
+        try:
+            json_data = loads(raw_json)
+            elevation = parse_json(json_data)
+            return elevation
+        except JSONDecodeError:
+            return 0
+    else:
+        return 0
+
+
+def haversine(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    r = 6371
+    return int(c * r * 1000)
 
 
 def create_matrix(latitude, longitude, radius, spacing, api_key):
@@ -43,35 +89,23 @@ def create_matrix(latitude, longitude, radius, spacing, api_key):
     :param api_key: google maps api key
     :return: elevation matrix
     """
-    total_elements = 2 * radius * (2 * radius + 1)
-    matrix = []
-    for y in range(-radius, radius + 1):
-        y_index = radius + y
-        row = []
-        for x in range(-radius, radius + 1):
-            x_index = (radius + x) + (2 * radius * y_index)
-            relative_latitude = latitude + (x * spacing)
-            relative_longitude = longitude + (y * spacing)
-            print("Percent: %.4f: %.5f, %.5f" % ((x_index / total_elements), relative_latitude, relative_longitude))
-            elevation = retrieve_elevation(relative_latitude, relative_longitude, api_key)
-            row.append((relative_latitude, relative_longitude, elevation))
-        matrix.append(row)
+
+    step_distance = haversine(latitude, longitude, latitude + spacing, longitude + spacing)
+
+    width = 2 * radius + 1
+    total_elements = width * width
+
+    latitude_range = list(map(lambda i: round((i * spacing) + latitude, 6), range(-radius, radius + 1)))
+    longitude_range = list(map(lambda i: round((i * spacing) + longitude, 6), range(-radius, radius + 1)))
+    matrix = [[(0, 0, 0) for _ in range(width)] for _ in range(width)]
+
+    for x in range(width):
+        for y in range(width):
+            progress_bar(((x * width) + y) / (total_elements - 1))
+            elevation = retrieve_elevation(latitude_range[x], longitude_range[y], api_key)
+            matrix[x][y] = (x, y, elevation)
+    print("")
     return matrix
-
-
-def to_relative_matrix(matrix):
-    """
-    Converts an elevation matrix to a matrix of relative values
-    :param matrix: elevation matrix
-    :return: relative matrix
-    """
-    new_matrix = []
-    for x in range(0, len(matrix)):
-        new_row = []
-        for y in range(0, len(matrix[x])):
-            new_row.append((x, y, matrix[x][y][2]))
-        new_matrix.append(new_row)
-    return new_matrix
 
 
 def pickle_matrix(matrix, pickle_file):
@@ -82,20 +116,19 @@ def pickle_matrix(matrix, pickle_file):
     :return: None
     """
     with open(pickle_file, 'wb') as pickle_file:
-        pickle.dump(matrix, pickle_file)
+        dump(matrix, pickle_file)
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(argv) != 4:
         print("Invalid number of arguments")
         exit(1)
 
-    api_key = sys.argv[1]
-    latitude = float(sys.argv[2])
-    longitude = float(sys.argv[3])
+    api_key = argv[1]
+    latitude = float(argv[2])
+    longitude = float(argv[3])
 
-    matrix = create_matrix(latitude, longitude, 20, 0.005, api_key)
-    matrix = to_relative_matrix(matrix)
+    matrix = create_matrix(latitude, longitude, 50, 0.0005, api_key)
     pickle_matrix(matrix, "matrix_pickle.bin")
 
 

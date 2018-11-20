@@ -1,7 +1,6 @@
-import pickle
-import numpy as np
+from pickle import load
+from numpy import array
 from mayavi import mlab
-import sys
 
 
 def unpickle_elevation_matrix(pickle_file):
@@ -11,7 +10,7 @@ def unpickle_elevation_matrix(pickle_file):
     :return: elevation matrix
     """
     with open(pickle_file, 'rb') as pickle_file:
-        matrix = pickle.load(pickle_file)
+        matrix = load(pickle_file)
     return matrix
 
 
@@ -28,7 +27,7 @@ def convert_matrix(matrix, scale_factor):
             x.append(value[0] * scale_factor)
             y.append(value[1] * scale_factor)
             z.append(value[2])
-    return np.array(x), np.array(y), np.array(z)
+    return array(x), array(y), array(z)
 
 
 def plot_mlab(x, y, z):
@@ -39,22 +38,18 @@ def plot_mlab(x, y, z):
     :param z: z_values
     :return: None
     """
-    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1), size=(1024, 768))
-    pts = mlab.points3d(x, y, z, z, scale_mode='none', scale_factor=1.0)
+    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(0, 0, 0), size=(1024, 768))
+    pts = mlab.points3d(x, y, z, z, scale_mode='none', scale_factor=0.0)
     mesh = mlab.pipeline.delaunay2d(pts)
 
-    surf = mlab.pipeline.surface(mesh)
+    mlab.pipeline.surface(mesh)
 
     mlab.show()
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Invalid number of arguments")
-        exit(1)
-
-    loaded_matrix = unpickle_elevation_matrix(sys.argv[1])
-    x, y, z = convert_matrix(loaded_matrix, 300)
+    loaded_matrix = unpickle_elevation_matrix("matrix_pickle_capitan.bin")
+    x, y, z = convert_matrix(loaded_matrix, 30)
     plot_mlab(x, y, z)
 
 
